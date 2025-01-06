@@ -1,7 +1,7 @@
 services:
   # Backend API service
   - type: web
-    name: colmignoli-whist-backend
+    name: colmignoli-whist
     env: docker
     region: frankfurt
     plan: free
@@ -14,12 +14,12 @@ services:
       - key: FRONTEND_URL
         fromService:
           type: static
-          name: colmignoli-whist-frontend
+          name: colmignoli-whist-backend
           envVarKey: RENDER_EXTERNAL_URL
     
   # Frontend static site
   - type: static
-    name: colmignoli-whist-frontend
+    name: colmignoli-whist-backend
     rootDir: frontend
     buildCommand: npm install && REACT_APP_API_URL=$RENDER_EXTERNAL_BACKEND_URL npm run build
     publishPath: build
@@ -37,5 +37,5 @@ services:
       - key: RENDER_EXTERNAL_BACKEND_URL
         fromService:
           type: web
-          name: colmignoli-whist-backend
+          name: colmignoli-whist
           envVarKey: RENDER_EXTERNAL_URL
