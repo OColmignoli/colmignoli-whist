@@ -160,11 +160,23 @@ function App() {
     }
   }, [ws, playerName]);
 
-  const startGame = useCallback(() => {
-    if (ws) {
-      ws.send(JSON.stringify({ action: 'start_game' }));
+  const addAIPlayer = useCallback(() => {
+    if (ws && gameState) {
+      ws.send(JSON.stringify({ 
+        action: 'add_ai_player',
+        game_id: gameState.game_id
+      }));
     }
-  }, [ws]);
+  }, [ws, gameState]);
+
+  const startGame = useCallback(() => {
+    if (ws && gameState) {
+      ws.send(JSON.stringify({ 
+        action: 'start_game',
+        game_id: gameState.game_id 
+      }));
+    }
+  }, [ws, gameState]);
 
   const makeBid = useCallback((bid: number) => {
     if (ws) {
@@ -404,12 +416,41 @@ function App() {
             </div>
 
             {gameState.phase === 'waiting' && (
-              <button 
-                onClick={startGame} 
-                disabled={gameState.players.length < 1}
-              >
-                Start Game (AI will fill empty slots)
-              </button>
+              <div className="game-controls" style={{
+                display: 'flex',
+                gap: '10px',
+                justifyContent: 'center',
+                margin: '20px 0'
+              }}>
+                <button
+                  onClick={addAIPlayer}
+                  style={{
+                    backgroundColor: '#2196F3',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '10px 20px',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  Add AI Player
+                </button>
+                <button
+                  onClick={startGame}
+                  style={{
+                    backgroundColor: '#4CAF50',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '10px 20px',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  Start Game (AI will fill empty slots)
+                </button>
+              </div>
             )}
 
             {gameState.phase === 'bidding' && gameState.current_player === playerId && (

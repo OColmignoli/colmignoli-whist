@@ -254,7 +254,7 @@ class Game:
         ai_id = f"ai_player_{len(self.ai_players) + 1}"
         self.ai_players[ai_id] = AIPlayer(ai_id)
         self.add_player(ai_id)  # Use existing add_player method
-        self.player_names[ai_id] = f"Computer {len(self.ai_players)}"
+        self.player_names[ai_id] = f"Computer {len(self.ai_players)} 🤖"
         return ai_id
     
     def start_game(self) -> bool:
@@ -263,6 +263,11 @@ class Game:
         
         self.started = True
         self._start_new_round()
+        
+        # Start AI handler in the background if there are AI players
+        if self.ai_players:
+            asyncio.create_task(self.handle_ai_turns())
+        
         return True
     
     def _start_new_round(self):
@@ -444,31 +449,31 @@ class Game:
                 self.scores[player_id] += tricks_won * 2
 
     async def handle_ai_turns(self):
-        while True:
-            await asyncio.sleep(1)  # Check every second
-            
-            if not self.started or not self.current_player in self.ai_players:
-                continue
-            
-            ai = self.ai_players[self.current_player]
-            
-            if self.phase == 'bidding':
-                bid = ai.calculate_bid(
-                    self.players[self.current_player],
-                    self.trump_card,
-                    self.game_stage
-                )
-                self.make_bid(self.current_player, bid)
-            
-            elif self.phase == 'playing':
-                card_index = ai.choose_card(
-                    self.players[self.current_player],
-                    self.current_round,
-                    self.trump_card.suit if self.trump_card else None,
-                    self.led_suit,
-                    self.game_stage
-                )
-                self.play_card(self.current_player, card_index)
+        while self.started:
+            await asyncio.sleep(1)  # Wait a bit to simulate thinking
+            if self.current_player and self.current_player in self.ai_players:
+                ai = self.ai_players[self.current_player]
+                
+                if self.phase == "bidding":
+                    # AI makes a bid
+                    bid = ai.calculate_bid(
+                        self.players[self.current_player],
+                        self.trump_card,
+                        self.game_stage
+                    )
+                    self.make_bid(self.current_player, bid)
+                
+                elif self.phase == "playing":
+                    # AI plays a card
+                    led_suit = self.led_suit if self.current_round else None
+                    card_index = ai.choose_card(
+                        self.players[self.current_player],
+                        self.current_round,
+                        self.trump_card.suit if self.trump_card else None,
+                        led_suit,
+                        self.game_stage
+                    )
+                    self.play_card(self.current_player, card_index)
 
 def generate_game_id() -> str:
     adjectives = [
@@ -592,34 +597,67 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                 else:
                     await websocket.send_json({"action": "error", "message": "Game not found"})
             
+            elif data["action"] == "add_ai_player":
+                game_id = data.get("game_id")
+                if game_id in manager.games:
+                    game = manager.games[game_id]
+                    if len(game.player_order) < game.max_players and not game.started:
+                        ai_id = game.add_ai_player()
+                        await manager.broadcast_to_game(
+                            game_id,
+                            {
+                                "action": "player_joined",
+                                "player_id": ai_id,
+                                "game_state": game.get_game_state(player_id)
+                            }
+                        )
+                    else:
+                        await websocket.send_json({
+                            "action": "error",
+                            "message": "Cannot add more players to this game"
+                        })
+                else:
+                    await websocket.send_json({
+                        "action": "error",
+                        "message": "Game not found"
+                    })
+                continue
+
             elif data["action"] == "start_game":
-                game = manager.get_game_by_player(player_id)
-                if not game:
-                    continue
-                
-                # Add AI players if needed
-                while len(game.players) < 3:
-                    ai_id = game.add_ai_player()
-                    await manager.broadcast_to_game(
-                        game.game_id,
-                        {
-                            'action': 'player_joined',
-                            'player_id': ai_id,
-                            'game_state': game.get_game_state(player_id)
-                        }
-                    )
-                
-                game.start_game()
-                # Start AI handler in the background
-                asyncio.create_task(game.handle_ai_turns())
-                
-                await manager.broadcast_to_game(
-                    game.game_id,
-                    {
-                        'action': 'game_started',
-                        'game_state': game.get_game_state(player_id)
-                    }
-                )
+                game_id = data.get("game_id")
+                if game_id in manager.games:
+                    game = manager.games[game_id]
+                    # Add AI players to fill empty slots
+                    while len(game.player_order) < game.min_players:
+                        ai_id = game.add_ai_player()
+                        await manager.broadcast_to_game(
+                            game_id,
+                            {
+                                "action": "player_joined",
+                                "player_id": ai_id,
+                                "game_state": game.get_game_state(player_id)
+                            }
+                        )
+                    
+                    if game.start_game():
+                        await manager.broadcast_to_game(
+                            game_id,
+                            {
+                                "action": "game_started",
+                                "game_state": game.get_game_state(player_id)
+                            }
+                        )
+                    else:
+                        await websocket.send_json({
+                            "action": "error",
+                            "message": "Not enough players to start the game"
+                        })
+                else:
+                    await websocket.send_json({
+                        "action": "error",
+                        "message": "Game not found"
+                    })
+                continue
             
             elif data["action"] == "make_bid":
                 game = manager.get_game_by_player(player_id)
