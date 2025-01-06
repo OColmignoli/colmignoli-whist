@@ -15,11 +15,18 @@ services:
   - type: web
     name: colmignoli-whist-frontend
     env: static
-    buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: ./frontend/build
+    buildCommand: |
+      cd frontend && 
+      npm install && 
+      npm run build
+    staticPublishPath: frontend/build
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
     envVars:
       - key: NODE_VERSION
-        value: 18.x
+        value: 20.x
       - key: REACT_APP_API_URL
         fromService:
           type: web
