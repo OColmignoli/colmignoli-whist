@@ -33,6 +33,31 @@ function App() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [error, setError] = useState<string>('');
 
+  const handleServerMessage = useCallback((data: any) => {
+    switch (data.action) {
+      case 'game_created':
+        setGameId(data.game_id);
+        break;
+      case 'player_joined':
+      case 'game_started':
+      case 'bid_made':
+      case 'card_played':
+        setGameState(data.game_state);
+        break;
+      case 'error':
+        setError(data.message);
+        break;
+      case 'player_left':
+        if (gameState) {
+          setGameState({
+            ...gameState,
+            players: gameState.players.filter(p => p !== data.player_id)
+          });
+        }
+        break;
+    }
+  }, [gameState, setGameState, setError, setGameId]);
+
   useEffect(() => {
     const apiUrl = process.env.REACT_APP_API_URL || 'ws://localhost:8000';
     // Convert http:// or https:// to ws:// or wss:// respectively
@@ -57,32 +82,7 @@ function App() {
     return () => {
       websocket.close();
     };
-  }, [playerId]);
-
-  const handleServerMessage = (data: any) => {
-    switch (data.action) {
-      case 'game_created':
-        setGameId(data.game_id);
-        break;
-      case 'player_joined':
-      case 'game_started':
-      case 'bid_made':
-      case 'card_played':
-        setGameState(data.game_state);
-        break;
-      case 'error':
-        setError(data.message);
-        break;
-      case 'player_left':
-        if (gameState) {
-          setGameState({
-            ...gameState,
-            players: gameState.players.filter(p => p !== data.player_id)
-          });
-        }
-        break;
-    }
-  };
+  }, [playerId, handleServerMessage]);
 
   const createGame = useCallback(() => {
     if (ws) {
