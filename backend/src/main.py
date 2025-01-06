@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from typing import Dict, List, Optional, Set
 import json
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 
 app = FastAPI()
@@ -124,6 +124,8 @@ class Game:
         self.dealer_index = 0
         self.game_stage = "ascending"  # ascending, no_trump, descending
         self.no_trump_rounds_played = 0
+        self.player_names = {}  # Map player_id to display_name
+        self.created_at = datetime.now()
 
     def add_player(self, player_id: str) -> bool:
         if len(self.players) >= self.max_players or self.started:
@@ -321,6 +323,7 @@ class Game:
         return {
             "game_id": self.game_id,
             "players": list(self.players.keys()),
+            "player_names": self.player_names,
             "current_player": self.current_player,
             "your_cards": [card.to_dict() for card in self.players.get(player_id, [])],
             "cards_per_player": {pid: len(cards) for pid, cards in self.players.items()},
@@ -335,10 +338,35 @@ class Game:
             "round_number": self.round_number,
             "cards_per_round": self.cards_per_round,
             "game_stage": self.game_stage,
-            "no_trump_rounds_played": self.no_trump_rounds_played
+            "no_trump_rounds_played": self.no_trump_rounds_played,
+            "created_at": self.created_at.isoformat()
         }
 
 manager = ConnectionManager()
+
+@app.get("/games")
+async def list_games():
+    current_time = datetime.now()
+    active_games = []
+    
+    # Clean up expired games
+    expired_games = []
+    for game_id, game in manager.games.items():
+        if current_time - game.created_at > timedelta(minutes=15):
+            expired_games.append(game_id)
+        elif not game.started:  # Only include non-started games
+            active_games.append({
+                'game_id': game.game_id,
+                'player_count': len(game.players),
+                'players': [game.player_names.get(p, p) for p in game.players],
+                'created_at': game.created_at.isoformat()
+            })
+    
+    # Remove expired games
+    for game_id in expired_games:
+        del manager.games[game_id]
+    
+    return {'games': active_games}
 
 @app.websocket("/ws/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, player_id: str):
@@ -347,13 +375,63 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
         while True:
             data = await websocket.receive_json()
             
-            if data["action"] == "create_game":
-                game_id = f"game_{datetime.now().strftime('%Y%m%d%H%M%S')}_{random.randint(1000, 9999)}"
+            if data["action"] == "set_name":
+                player_name = data.get("name", "").strip()
+                if not player_name:
+                    await websocket.send_json({
+                        "action": "error",
+                        "message": "Name cannot be empty"
+                    })
+                    continue
+                
+                # Store the player's name in their current game if they're in one
+                for game in manager.games.values():
+                    if player_id in game.players:
+                        game.player_names[player_id] = player_name
+                        await manager.broadcast_to_game(
+                            game.game_id,
+                            {
+                                "action": "name_updated",
+                                "player_id": player_id,
+                                "name": player_name,
+                                "game_state": game.get_game_state(player_id)
+                            }
+                        )
+                        break
+                
+                await websocket.send_json({
+                    "action": "name_set",
+                    "name": player_name
+                })
+                continue
+            
+            elif data["action"] == "create_game":
+                # Check if player is already in a game
+                for game in manager.games.values():
+                    if player_id in game.players:
+                        await websocket.send_json({
+                            "action": "error",
+                            "message": "You are already in a game"
+                        })
+                        continue
+                
+                game_id = f"game_{datetime.now().strftime('%Y%m%d%H%M%S_%f')}"
                 game = Game(game_id)
-                game.add_player(player_id)
+                game.players.append(player_id)
+                
+                # Set player name if we have it
+                if player_id in manager.active_connections and "name" in manager.active_connections[player_id]:
+                    game.player_names[player_id] = manager.active_connections[player_id]["name"]
+                
                 manager.games[game_id] = game
                 manager.player_to_game[player_id] = game_id
-                await websocket.send_json({"action": "game_created", "game_id": game_id})
+                
+                await websocket.send_json({
+                    "action": "game_created",
+                    "game_id": game_id,
+                    "game_state": game.get_game_state(player_id)
+                })
+                continue
             
             elif data["action"] == "join_game":
                 game_id = data["game_id"]
