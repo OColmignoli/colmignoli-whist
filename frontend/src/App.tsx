@@ -294,12 +294,15 @@ function App() {
           <div className="game-board">
             <div className="game-info">
               <p>Game ID: {gameState.game_id}</p>
-              <p>Players: {gameState.players.map(p => (
-                <span key={p} className={p.startsWith('ai_player') ? 'ai-player' : ''}>
-                  {gameState.player_names[p] || p}
-                  {p.startsWith('ai_player') && ' 🤖'}
-                </span>
-              )).reduce((prev, curr) => [prev, ', ', curr])}</p>
+              <p>Players: {gameState.players.map((p, i) => (
+                <React.Fragment key={p}>
+                  {i > 0 && ', '}
+                  <span className={p.startsWith('ai_player') ? 'ai-player' : ''}>
+                    {gameState.player_names[p] || p}
+                    {p.startsWith('ai_player') && ' 🤖'}
+                  </span>
+                </React.Fragment>
+              ))}</p>
               <p>Current Player: {
                 gameState.current_player.startsWith('ai_player') ? 
                 `${gameState.player_names[gameState.current_player]} 🤖 (thinking...)` :
