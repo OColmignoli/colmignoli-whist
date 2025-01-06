@@ -74,7 +74,7 @@ class ConnectionManager:
     async def broadcast_to_game(self, game_id: str, message: dict):
         if game_id in self.games:
             game = self.games[game_id]
-            for player_id in game.players:
+            for player_id in game.player_order:
                 if player_id in self.active_connections:
                     await self.active_connections[player_id].send_json(message)
 
@@ -211,7 +211,8 @@ class AIPlayer:
 class Game:
     def __init__(self, game_id: str):
         self.game_id = game_id
-        self.players: Dict[str, List[Card]] = {}
+        self.player_order: List[str] = []  # List to maintain player order
+        self.players: Dict[str, List[Card]] = {}  # Map player_id to their cards
         self.deck = Deck()
         self.current_player: Optional[str] = None
         self.started = False
@@ -229,87 +230,91 @@ class Game:
         self.dealer_index = 0
         self.game_stage = "ascending"  # ascending, no_trump, descending
         self.no_trump_rounds_played = 0
-        self.player_names = {}  # Map player_id to display_name
+        self.player_names: Dict[str, str] = {}  # Map player_id to display_name
         self.created_at = datetime.now()
         self.ai_players: Dict[str, AIPlayer] = {}
     
     def add_player(self, player_id: str) -> bool:
-        if len(self.players) >= self.max_players or self.started:
+        if len(self.player_order) >= self.max_players or self.started:
             return False
-        self.players[player_id] = []
-        self.scores[player_id] = 0
-        self.tricks_won[player_id] = 0
+        if player_id not in self.player_order:
+            self.player_order.append(player_id)
+            self.players[player_id] = []
+            self.scores[player_id] = 0
+            self.tricks_won[player_id] = 0
         return True
-
+    
     def add_ai_player(self) -> str:
         ai_id = f"ai_player_{len(self.ai_players) + 1}"
         self.ai_players[ai_id] = AIPlayer(ai_id)
-        self.players[ai_id] = []
-        self.scores[ai_id] = 0
-        self.tricks_won[ai_id] = 0
-        self.player_names[ai_id] = f"Computer {len(self.ai_players) + 1}"
+        self.add_player(ai_id)  # Use existing add_player method
+        self.player_names[ai_id] = f"Computer {len(self.ai_players)}"
         return ai_id
-
+    
     def start_game(self) -> bool:
-        if len(self.players) < self.min_players or self.started:
+        if len(self.player_order) < self.min_players or self.started:
             return False
         
         self.started = True
         self._start_new_round()
         return True
-
-    def _start_new_round(self) -> bool:
-        max_possible_cards = (52) // len(self.players)  # No need to subtract 1 as we might not have trump
-        
-        # Handle game stage transitions
-        if self.game_stage == "ascending" and self.cards_per_round > max_possible_cards:
-            self.game_stage = "no_trump"
-            self.cards_per_round = max_possible_cards
-            self.no_trump_rounds_played = 0
-        elif self.game_stage == "no_trump":
-            if self.no_trump_rounds_played >= len(self.players):
-                self.game_stage = "descending"
-                self.cards_per_round = max_possible_cards
-            else:
-                self.no_trump_rounds_played += 1
-        elif self.game_stage == "descending":
-            self.cards_per_round -= 1
-            if self.cards_per_round < 1:
-                self.phase = "game_over"
-                return False
-        
+    
+    def _start_new_round(self):
         self.deck.reset()
-        self.current_round.clear()
-        self.bids.clear()
-        self.tricks_won = {player_id: 0 for player_id in self.players}
+        self.current_round = {}
+        self.bids = {}
+        self.tricks_won = {p: 0 for p in self.player_order}
+        self.phase = "bidding"
         
         # Deal cards
-        for player_id in self.players:
+        for player_id in self.player_order:
             self.players[player_id] = []
             for _ in range(self.cards_per_round):
                 card = self.deck.draw()
                 if card:
                     self.players[player_id].append(card)
         
-        # Draw trump card only if not in no_trump stage
+        # Set trump card if not in no_trump stage
         if self.game_stage != "no_trump":
             self.trump_card = self.deck.draw()
         else:
             self.trump_card = None
         
-        # Rotate dealer and set first bidder
-        self.dealer_index = (self.dealer_index + 1) % len(self.players)
-        player_list = list(self.players.keys())
-        self.current_player = player_list[(self.dealer_index + 1) % len(player_list)]
+        # Set first player (after dealer)
+        self.dealer_index = (self.dealer_index + 1) % len(self.player_order)
+        self.current_player = self.player_order[(self.dealer_index + 1) % len(self.player_order)]
         
-        self.phase = "bidding"
-        self.led_suit = None
-        self.round_number += 1
-        return True
-
     def remove_player(self, player_id: str):
-        if player_id in self.players:
-            del self.players[player_id]
+        if player_id in self.player_order:
+            self.player_order.remove(player_id)
+            self.players.pop(player_id, None)
+            self.scores.pop(player_id, None)
+            self.tricks_won.pop(player_id, None)
+            self.bids.pop(player_id, None)
+            self.current_round.pop(player_id, None)
+            self.player_names.pop(player_id, None)
+            if player_id in self.ai_players:
+                self.ai_players.pop(player_id, None)
+    
+    def get_game_state(self, player_id: str) -> dict:
+        return {
+            "game_id": self.game_id,
+            "players": self.player_order,
+            "current_player": self.current_player,
+            "started": self.started,
+            "trump_card": self.trump_card.to_dict() if self.trump_card else None,
+            "current_round": {p: card.to_dict() for p, card in self.current_round.items()},
+            "bids": self.bids,
+            "tricks_won": self.tricks_won,
+            "scores": self.scores,
+            "round_number": self.round_number,
+            "cards_per_round": self.cards_per_round,
+            "phase": self.phase,
+            "game_stage": self.game_stage,
+            "player_names": self.player_names,
+            "your_cards": [card.to_dict() for card in self.players.get(player_id, [])],
+            "created_at": self.created_at.isoformat()
+        }
 
     def make_bid(self, player_id: str, bid: int) -> bool:
         if not self.started or self.phase != "bidding" or player_id != self.current_player:
@@ -321,16 +326,15 @@ class Game:
         self.bids[player_id] = bid
         
         # Move to next player for bidding
-        player_list = list(self.players.keys())
-        current_index = player_list.index(self.current_player)
-        next_index = (current_index + 1) % len(player_list)
-        self.current_player = player_list[next_index]
+        current_index = self.player_order.index(self.current_player)
+        next_index = (current_index + 1) % len(self.player_order)
+        self.current_player = self.player_order[next_index]
         
         # If all players have bid, start playing phase
         if len(self.bids) == len(self.players):
             self.phase = "playing"
             # First player after dealer leads
-            self.current_player = player_list[(self.dealer_index + 1) % len(player_list)]
+            self.current_player = self.player_order[(self.dealer_index + 1) % len(self.player_order)]
         
         return True
 
@@ -374,9 +378,8 @@ class Game:
                 self._start_new_round()
         else:
             # Move to next player
-            player_list = list(self.players.keys())
-            current_index = player_list.index(self.current_player)
-            self.current_player = player_list[(current_index + 1) % len(player_list)]
+            current_index = self.player_order.index(self.current_player)
+            self.current_player = self.player_order[(current_index + 1) % len(self.player_order)]
         
         return True
 
@@ -433,29 +436,6 @@ class Game:
             else:
                 # Wrong bid: only 2 points per trick
                 self.scores[player_id] += tricks_won * 2
-
-    def get_game_state(self, player_id: str) -> dict:
-        return {
-            "game_id": self.game_id,
-            "players": list(self.players.keys()),
-            "player_names": self.player_names,
-            "current_player": self.current_player,
-            "your_cards": [card.to_dict() for card in self.players.get(player_id, [])],
-            "cards_per_player": {pid: len(cards) for pid, cards in self.players.items()},
-            "started": self.started,
-            "phase": self.phase,
-            "trump_card": self.trump_card.to_dict() if self.trump_card else None,
-            "bids": self.bids,
-            "tricks_won": self.tricks_won,
-            "scores": self.scores,
-            "current_round": {pid: card.to_dict() for pid, card in self.current_round.items()},
-            "led_suit": self.led_suit,
-            "round_number": self.round_number,
-            "cards_per_round": self.cards_per_round,
-            "game_stage": self.game_stage,
-            "no_trump_rounds_played": self.no_trump_rounds_played,
-            "created_at": self.created_at.isoformat()
-        }
 
     async def handle_ai_turns(self):
         while True:
