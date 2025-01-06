@@ -6,6 +6,7 @@ services:
     region: frankfurt
     plan: free
     healthCheckPath: /health
+    healthCheckTimeout: 100
     autoDeploy: true
     envVars:
       - key: ENVIRONMENT
@@ -22,6 +23,10 @@ services:
     rootDir: frontend
     buildCommand: npm install && REACT_APP_API_URL=$RENDER_EXTERNAL_BACKEND_URL npm run build
     publishPath: build
+    headers:
+      - path: /*
+        name: Access-Control-Allow-Origin
+        value: "*"
     envVars:
       - key: NODE_VERSION
         value: 20.x

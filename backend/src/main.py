@@ -1,5 +1,6 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from typing import Dict, List, Optional, Set
 import json
 import random
@@ -21,6 +22,13 @@ app.add_middleware(
     expose_headers=["*"],
     max_age=3600,
 )
+
+@app.middleware("http")
+async def handle_head_requests(request: Request, call_next):
+    response = await call_next(request)
+    if request.method == "HEAD":
+        return JSONResponse(content={}, status_code=200)
+    return response
 
 @app.get("/")
 @app.head("/")
