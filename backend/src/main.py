@@ -1,9 +1,10 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 import json
 import random
+import asyncio
 from datetime import datetime, timedelta
 import os
 
@@ -103,6 +104,110 @@ class Deck:
     def draw(self) -> Optional[Card]:
         return self.cards.pop() if self.cards else None
 
+class AIPlayer:
+    def __init__(self, player_id: str, difficulty: str = 'normal'):
+        self.player_id = player_id
+        self.difficulty = difficulty
+    
+    def calculate_bid(self, cards: List[Card], trump_card: Optional[Card], game_stage: str) -> int:
+        if game_stage == "no_trump":
+            return self._calculate_no_trump_bid(cards)
+        return self._calculate_trump_bid(cards, trump_card.suit if trump_card else None)
+    
+    def _calculate_trump_bid(self, cards: List[Card], trump_suit: Optional[str]) -> int:
+        score = 0
+        for card in cards:
+            # High cards in trump suit are worth more
+            if card.suit == trump_suit:
+                if card.value in ['A', 'K', 'Q', 'J']:
+                    score += 1.0
+                else:
+                    score += 0.5
+            # High cards in other suits
+            elif card.value in ['A', 'K']:
+                score += 0.8
+            elif card.value in ['Q', 'J']:
+                score += 0.4
+        return max(0, round(score))
+    
+    def _calculate_no_trump_bid(self, cards: List[Card]) -> int:
+        score = 0
+        for card in cards:
+            if card.value == 'A':
+                score += 1.0
+            elif card.value == 'K':
+                score += 0.8
+            elif card.value == 'Q':
+                score += 0.5
+            elif card.value == 'J':
+                score += 0.3
+        return max(0, round(score))
+    
+    def choose_card(self, cards: List[Card], current_round: Dict[str, Card], 
+                   trump_suit: Optional[str], led_suit: Optional[str], 
+                   game_stage: str) -> int:
+        playable_cards = self._get_playable_cards(cards, led_suit)
+        if not playable_cards:
+            return 0  # Should never happen as we always have at least one card
+        
+        if not current_round:  # We're leading
+            return self._choose_lead_card(cards, trump_suit, game_stage)
+        
+        return self._choose_follow_card(cards, current_round, trump_suit, led_suit, game_stage)
+    
+    def _get_playable_cards(self, cards: List[Card], led_suit: Optional[str]) -> List[Tuple[int, Card]]:
+        if not led_suit:
+            return [(i, card) for i, card in enumerate(cards)]
+        
+        # Must follow suit if possible
+        same_suit_cards = [(i, card) for i, card in enumerate(cards) if card.suit == led_suit]
+        return same_suit_cards if same_suit_cards else [(i, card) for i, card in enumerate(cards)]
+    
+    def _choose_lead_card(self, cards: List[Card], trump_suit: Optional[str], game_stage: str) -> int:
+        # Strategy: Lead with high cards in non-trump suits
+        non_trump_high_cards = [(i, card) for i, card in enumerate(cards) 
+                              if card.suit != trump_suit and card.value in ['A', 'K']]
+        if non_trump_high_cards:
+            return non_trump_high_cards[0][0]
+        
+        # If no high cards, lead lowest card
+        return min(range(len(cards)), 
+                  key=lambda i: (cards[i].suit == trump_suit, 
+                               self._card_value(cards[i])))
+    
+    def _choose_follow_card(self, cards: List[Card], current_round: Dict[str, Card],
+                          trump_suit: Optional[str], led_suit: str, game_stage: str) -> int:
+        playable = self._get_playable_cards(cards, led_suit)
+        if not playable:
+            return 0
+        
+        # Get highest card played so far
+        highest_played = max(current_round.values(), 
+                           key=lambda c: (c.suit == trump_suit, self._card_value(c)))
+        
+        # If we can't follow suit, try to trump if valuable
+        if led_suit and all(card.suit != led_suit for _, card in playable):
+            trump_cards = [(i, card) for i, card in playable if card.suit == trump_suit]
+            if trump_cards:
+                return trump_cards[0][0]  # Play lowest trump
+            return playable[0][0]  # Discard lowest card
+        
+        # Try to win the trick if possible
+        can_win = [(i, card) for i, card in playable 
+                   if (card.suit == trump_suit and highest_played.suit != trump_suit) or
+                      (card.suit == highest_played.suit and 
+                       self._card_value(card) > self._card_value(highest_played))]
+        
+        if can_win:
+            return min(can_win, key=lambda x: self._card_value(x[1]))[0]  # Win with lowest possible
+        
+        return min(playable, key=lambda x: self._card_value(x[1]))[0]  # Play lowest card
+    
+    def _card_value(self, card: Card) -> int:
+        values = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, 
+                 '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14}
+        return values[card.value]
+
 class Game:
     def __init__(self, game_id: str):
         self.game_id = game_id
@@ -126,7 +231,8 @@ class Game:
         self.no_trump_rounds_played = 0
         self.player_names = {}  # Map player_id to display_name
         self.created_at = datetime.now()
-
+        self.ai_players: Dict[str, AIPlayer] = {}
+    
     def add_player(self, player_id: str) -> bool:
         if len(self.players) >= self.max_players or self.started:
             return False
@@ -134,6 +240,15 @@ class Game:
         self.scores[player_id] = 0
         self.tricks_won[player_id] = 0
         return True
+
+    def add_ai_player(self) -> str:
+        ai_id = f"ai_player_{len(self.ai_players) + 1}"
+        self.ai_players[ai_id] = AIPlayer(ai_id)
+        self.players[ai_id] = []
+        self.scores[ai_id] = 0
+        self.tricks_won[ai_id] = 0
+        self.player_names[ai_id] = f"Computer {len(self.ai_players) + 1}"
+        return ai_id
 
     def start_game(self) -> bool:
         if len(self.players) < self.min_players or self.started:
@@ -342,6 +457,33 @@ class Game:
             "created_at": self.created_at.isoformat()
         }
 
+    async def handle_ai_turns(self):
+        while True:
+            await asyncio.sleep(1)  # Check every second
+            
+            if not self.started or not self.current_player in self.ai_players:
+                continue
+            
+            ai = self.ai_players[self.current_player]
+            
+            if self.phase == 'bidding':
+                bid = ai.calculate_bid(
+                    self.players[self.current_player],
+                    self.trump_card,
+                    self.game_stage
+                )
+                self.make_bid(self.current_player, bid)
+            
+            elif self.phase == 'playing':
+                card_index = ai.choose_card(
+                    self.players[self.current_player],
+                    self.current_round,
+                    self.trump_card.suit if self.trump_card else None,
+                    self.led_suit,
+                    self.game_stage
+                )
+                self.play_card(self.current_player, card_index)
+
 manager = ConnectionManager()
 
 @app.get("/games")
@@ -417,11 +559,10 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                 
                 game_id = f"game_{datetime.now().strftime('%Y%m%d%H%M%S_%f')}"
                 game = Game(game_id)
-                game.players.append(player_id)
-                
-                # Set player name if we have it
-                if player_id in manager.active_connections and "name" in manager.active_connections[player_id]:
-                    game.player_names[player_id] = manager.active_connections[player_id]["name"]
+                game.players[player_id] = []
+                game.player_names[player_id] = player_name
+                game.scores[player_id] = 0
+                game.tricks_won[player_id] = 0
                 
                 manager.games[game_id] = game
                 manager.player_to_game[player_id] = game_id
@@ -453,53 +594,69 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                     await websocket.send_json({"action": "error", "message": "Game not found"})
             
             elif data["action"] == "start_game":
-                game_id = manager.player_to_game.get(player_id)
-                if game_id and game_id in manager.games:
-                    game = manager.games[game_id]
-                    if game.start_game():
-                        await manager.broadcast_to_game(
-                            game_id,
-                            {
-                                "action": "game_started",
-                                "game_state": game.get_game_state(player_id)
-                            }
-                        )
-                    else:
-                        await websocket.send_json({"action": "error", "message": "Cannot start game"})
+                game = manager.get_game_by_player(player_id)
+                if not game:
+                    continue
+                
+                # Add AI players if needed
+                while len(game.players) < 3:
+                    ai_id = game.add_ai_player()
+                    await manager.broadcast_to_game(
+                        game.game_id,
+                        {
+                            'action': 'player_joined',
+                            'player_id': ai_id,
+                            'game_state': game.get_game_state(player_id)
+                        }
+                    )
+                
+                game.start_game()
+                # Start AI handler in the background
+                asyncio.create_task(game.handle_ai_turns())
+                
+                await manager.broadcast_to_game(
+                    game.game_id,
+                    {
+                        'action': 'game_started',
+                        'game_state': game.get_game_state(player_id)
+                    }
+                )
             
             elif data["action"] == "make_bid":
-                game_id = manager.player_to_game.get(player_id)
-                if game_id and game_id in manager.games:
-                    game = manager.games[game_id]
-                    if game.make_bid(player_id, data["bid"]):
-                        await manager.broadcast_to_game(
-                            game_id,
-                            {
-                                "action": "bid_made",
-                                "player_id": player_id,
-                                "bid": data["bid"],
-                                "game_state": game.get_game_state(player_id)
-                            }
-                        )
-                    else:
-                        await websocket.send_json({"action": "error", "message": "Cannot make bid"})
+                game = manager.get_game_by_player(player_id)
+                if not game:
+                    continue
+                
+                if game.make_bid(player_id, data["bid"]):
+                    await manager.broadcast_to_game(
+                        game.game_id,
+                        {
+                            "action": "bid_made",
+                            "player_id": player_id,
+                            "bid": data["bid"],
+                            "game_state": game.get_game_state(player_id)
+                        }
+                    )
+                else:
+                    await websocket.send_json({"action": "error", "message": "Cannot make bid"})
             
             elif data["action"] == "play_card":
-                game_id = manager.player_to_game.get(player_id)
-                if game_id and game_id in manager.games:
-                    game = manager.games[game_id]
-                    if game.play_card(player_id, data["card_index"]):
-                        await manager.broadcast_to_game(
-                            game_id,
-                            {
-                                "action": "card_played",
-                                "player_id": player_id,
-                                "card_index": data["card_index"],
-                                "game_state": game.get_game_state(player_id)
-                            }
-                        )
-                    else:
-                        await websocket.send_json({"action": "error", "message": "Cannot play card"})
+                game = manager.get_game_by_player(player_id)
+                if not game:
+                    continue
+                
+                if game.play_card(player_id, data["card_index"]):
+                    await manager.broadcast_to_game(
+                        game.game_id,
+                        {
+                            "action": "card_played",
+                            "player_id": player_id,
+                            "card_index": data["card_index"],
+                            "game_state": game.get_game_state(player_id)
+                        }
+                    )
+                else:
+                    await websocket.send_json({"action": "error", "message": "Cannot play card"})
     
     except WebSocketDisconnect:
         manager.disconnect(player_id)

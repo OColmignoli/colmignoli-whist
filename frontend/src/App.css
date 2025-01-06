@@ -80,6 +80,15 @@ button:hover:not(:disabled) {
   text-align: left;
 }
 
+.game-info p {
+  margin: 0.5rem 0;
+  font-size: 1.1rem;
+}
+
+.game-info .current-player {
+  font-weight: bold;
+}
+
 .trump-card {
   display: inline-block;
   margin: 10px;
@@ -318,4 +327,9 @@ button:hover {
 button:disabled {
   background-color: #6c757d;
   cursor: not-allowed;
+}
+
+.ai-player {
+  color: #2196F3;
+  font-style: italic;
 }

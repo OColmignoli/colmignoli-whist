@@ -294,8 +294,17 @@ function App() {
           <div className="game-board">
             <div className="game-info">
               <p>Game ID: {gameState.game_id}</p>
-              <p>Players: {gameState.players.map(p => gameState.player_names[p] || p).join(', ')}</p>
-              <p>Current Player: {gameState.current_player}</p>
+              <p>Players: {gameState.players.map(p => (
+                <span key={p} className={p.startsWith('ai_player') ? 'ai-player' : ''}>
+                  {gameState.player_names[p] || p}
+                  {p.startsWith('ai_player') && ' 🤖'}
+                </span>
+              )).reduce((prev, curr) => [prev, ', ', curr])}</p>
+              <p>Current Player: {
+                gameState.current_player.startsWith('ai_player') ? 
+                `${gameState.player_names[gameState.current_player]} 🤖 (thinking...)` :
+                gameState.player_names[gameState.current_player] || gameState.current_player
+              }</p>
               <p>Phase: {gameState.phase}</p>
               <p>
                 Round: {gameState.round_number} ({gameState.cards_per_round} cards)
@@ -319,9 +328,9 @@ function App() {
             {gameState.phase === 'waiting' && (
               <button 
                 onClick={startGame} 
-                disabled={gameState.players.length < 3}
+                disabled={gameState.players.length < 1}
               >
-                Start Game ({gameState.players.length}/3-5 players)
+                Start Game (AI will fill empty slots)
               </button>
             )}
 
