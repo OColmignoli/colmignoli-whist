@@ -479,13 +479,16 @@ async def list_games():
         elif not game.started:  # Only include non-started games
             active_games.append({
                 'game_id': game.game_id,
-                'player_count': len(game.players),
-                'players': [game.player_names.get(p, p) for p in game.players],
+                'player_count': len(game.player_order),
+                'players': [game.player_names.get(p, p) for p in game.player_order],
                 'created_at': game.created_at.isoformat()
             })
     
-    # Remove expired games
+    # Remove expired games and their players
     for game_id in expired_games:
+        game = manager.games[game_id]
+        for player_id in game.player_order:
+            manager.player_to_game.pop(player_id, None)
         del manager.games[game_id]
     
     return {'games': active_games}
@@ -528,30 +531,21 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                 continue
             
             elif data["action"] == "create_game":
-                # Check if player is already in a game
-                for game in manager.games.values():
-                    if player_id in game.players:
-                        await websocket.send_json({
-                            "action": "error",
-                            "message": "You are already in a game"
-                        })
-                        continue
-                
-                game_id = f"game_{datetime.now().strftime('%Y%m%d%H%M%S_%f')}"
-                game = Game(game_id)
-                game.players[player_id] = []
-                game.player_names[player_id] = player_name
-                game.scores[player_id] = 0
-                game.tricks_won[player_id] = 0
-                
-                manager.games[game_id] = game
-                manager.player_to_game[player_id] = game_id
-                
-                await websocket.send_json({
-                    "action": "game_created",
-                    "game_id": game_id,
-                    "game_state": game.get_game_state(player_id)
-                })
+                # Only create a new game if player isn't already in one
+                if player_id not in manager.player_to_game:
+                    game_id = f"game_{datetime.now().strftime('%Y%m%d%H%M%S_%f')}"
+                    game = Game(game_id)
+                    game.add_player(player_id)
+                    game.player_names[player_id] = player_name
+                    
+                    manager.games[game_id] = game
+                    manager.player_to_game[player_id] = game_id
+                    
+                    await websocket.send_json({
+                        "action": "game_created",
+                        "game_id": game_id,
+                        "game_state": game.get_game_state(player_id)
+                    })
                 continue
             
             elif data["action"] == "join_game":
