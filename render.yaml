@@ -5,7 +5,8 @@ services:
     env: python
     region: frankfurt
     plan: free
-    buildCommand: cd backend && pip install -r requirements.txt
+    runtime: python3
+    buildCommand: pip install -r backend/requirements.txt
     startCommand: cd backend/src && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true
@@ -14,6 +15,8 @@ services:
         value: 3.11.0
       - key: ENVIRONMENT
         value: production
+      - key: PORT
+        value: "10000"
       - key: FRONTEND_URL
         fromService:
           type: web
@@ -26,7 +29,6 @@ services:
     env: static
     region: frankfurt
     buildCommand: |
-      export NODE_VERSION=20.x &&
       cd frontend && 
       npm install && 
       REACT_APP_API_URL=$RENDER_EXTERNAL_BACKEND_URL npm run build
