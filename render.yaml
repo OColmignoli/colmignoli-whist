@@ -19,7 +19,7 @@ services:
       export NODE_VERSION=20.x &&
       cd frontend && 
       npm install && 
-      npm run build
+      REACT_APP_API_URL=$RENDER_EXTERNAL_BACKEND_URL npm run build
     staticPublishPath: frontend/build
     routes:
       - type: rewrite
@@ -28,7 +28,7 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20.x
-      - key: REACT_APP_API_URL
+      - key: RENDER_EXTERNAL_BACKEND_URL
         fromService:
           type: web
           name: colmignoli-whist-backend
