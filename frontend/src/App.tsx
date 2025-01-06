@@ -35,7 +35,9 @@ function App() {
 
   useEffect(() => {
     const apiUrl = process.env.REACT_APP_API_URL || 'ws://localhost:8000';
-    const websocket = new WebSocket(`${apiUrl}/ws/${playerId}`);
+    // Convert http:// or https:// to ws:// or wss:// respectively
+    const wsUrl = apiUrl.replace(/^http/, 'ws');
+    const websocket = new WebSocket(`${wsUrl}/ws/${playerId}`);
     
     websocket.onopen = () => {
       console.log('Connected to server');
