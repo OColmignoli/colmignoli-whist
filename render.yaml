@@ -2,16 +2,12 @@ services:
   # Backend API service
   - type: web
     name: colmignoli-whist-backend
-    env: python
+    env: docker
     region: frankfurt
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: cd backend/src && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
       - key: ENVIRONMENT
         value: production
       - key: PORT
