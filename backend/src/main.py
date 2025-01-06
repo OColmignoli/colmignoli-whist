@@ -470,6 +470,17 @@ class Game:
                 )
                 self.play_card(self.current_player, card_index)
 
+def generate_game_id() -> str:
+    adjectives = [
+        "Happy", "Lucky", "Wild", "Brave", "Clever", "Mighty", "Swift", "Jolly",
+        "Royal", "Golden", "Silver", "Crystal", "Magic", "Secret", "Epic", "Grand"
+    ]
+    nouns = [
+        "Ace", "King", "Queen", "Jack", "Joker", "Dragon", "Phoenix", "Tiger",
+        "Lion", "Eagle", "Falcon", "Unicorn", "Knight", "Wizard", "Castle", "Crown"
+    ]
+    return f"{random.choice(adjectives)}{random.choice(nouns)}"
+
 manager = ConnectionManager()
 
 @app.get("/games")
@@ -539,10 +550,15 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
             elif data["action"] == "create_game":
                 # Only create a new game if player isn't already in one
                 if player_id not in manager.player_to_game:
-                    game_id = f"game_{datetime.now().strftime('%Y%m%d%H%M%S_%f')}"
+                    game_id = generate_game_id()
+                    # Ensure unique game ID
+                    while game_id in manager.games:
+                        game_id = generate_game_id()
+                    
                     game = Game(game_id)
                     game.add_player(player_id)
-                    game.player_names[player_id] = player_name
+                    if "name" in data:
+                        game.player_names[player_id] = data["name"]
                     
                     manager.games[game_id] = game
                     manager.player_to_game[player_id] = game_id

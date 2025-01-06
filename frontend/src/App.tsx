@@ -143,9 +143,12 @@ function App() {
 
   const createGame = useCallback(() => {
     if (ws) {
-      ws.send(JSON.stringify({ action: 'create_game' }));
+      ws.send(JSON.stringify({ 
+        action: 'create_game',
+        name: playerName
+      }));
     }
-  }, [ws]);
+  }, [ws, playerName]);
 
   const joinGame = useCallback((gameIdToJoin: string) => {
     if (ws) {
@@ -259,21 +262,67 @@ function App() {
           </div>
         ) : !gameState && (
           <div className="game-setup">
-            <button onClick={createGame}>Create New Game</button>
+            <button 
+              onClick={createGame}
+              className="create-game-btn"
+              style={{
+                fontSize: '1.2em',
+                padding: '12px 24px',
+                margin: '20px',
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+              }}
+            >
+              Create New Game
+            </button>
             
             <div className="available-games">
               <h3>Available Games</h3>
               {availableGames.length === 0 ? (
                 <p>No games available. Create one!</p>
               ) : (
-                <div className="games-list">
+                <div className="games-list" style={{
+                  display: 'grid',
+                  gap: '15px',
+                  padding: '20px',
+                  maxWidth: '800px',
+                  margin: '0 auto'
+                }}>
                   {availableGames.map(game => (
-                    <div key={game.game_id} className="game-item">
-                      <div className="game-info">
-                        <span>Players: {game.players.join(', ')}</span>
-                        <span>{game.player_count}/5 players</span>
+                    <div key={game.game_id} className="game-item" style={{
+                      backgroundColor: '#f5f5f5',
+                      padding: '20px',
+                      borderRadius: '10px',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '20px'
+                    }}>
+                      <div className="game-info" style={{
+                        flex: 1
+                      }}>
+                        <h4 style={{ margin: '0 0 10px 0' }}>{game.game_id}</h4>
+                        <p style={{ margin: '0', color: '#666' }}>
+                          Players ({game.player_count}/5): {game.players.join(', ')}
+                        </p>
                       </div>
-                      <button onClick={() => joinGame(game.game_id)}>
+                      <button 
+                        onClick={() => joinGame(game.game_id)}
+                        style={{
+                          backgroundColor: '#2196F3',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '10px 20px',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }}
+                      >
                         Join Game
                       </button>
                     </div>
@@ -282,14 +331,36 @@ function App() {
               )}
             </div>
 
-            <div className="join-game">
+            <div className="join-game" style={{
+              margin: '20px',
+              padding: '20px',
+              borderTop: '1px solid #eee'
+            }}>
               <input
                 type="text"
                 placeholder="Or enter Game ID"
                 onChange={(e) => setGameId(e.target.value)}
                 value={gameId}
+                style={{
+                  padding: '10px',
+                  marginRight: '10px',
+                  borderRadius: '4px',
+                  border: '1px solid #ddd'
+                }}
               />
-              <button onClick={() => joinGame(gameId)}>Join Game</button>
+              <button 
+                onClick={() => joinGame(gameId)}
+                style={{
+                  backgroundColor: '#2196F3',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '10px 20px',
+                  cursor: 'pointer'
+                }}
+              >
+                Join Game
+              </button>
             </div>
           </div>
         )}
