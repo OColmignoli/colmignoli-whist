@@ -16,15 +16,19 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_URL],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "HEAD", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 @app.get("/")
+@app.head("/")
 async def read_root():
     return {"status": "healthy", "message": "Whist Game Backend API"}
 
 @app.get("/health")
+@app.head("/health")
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
