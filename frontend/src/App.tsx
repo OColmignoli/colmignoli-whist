@@ -32,6 +32,7 @@ function App() {
   const [gameId, setGameId] = useState<string>('');
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [error, setError] = useState<string>('');
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
 
   const handleServerMessage = useCallback((data: any) => {
     switch (data.action) {
@@ -63,6 +64,7 @@ function App() {
     if (!apiUrl) {
       console.error('REACT_APP_API_URL is not set');
       setError('API URL not configured');
+      setConnectionStatus('disconnected');
       return;
     }
     console.log('API URL:', apiUrl);
@@ -75,6 +77,7 @@ function App() {
     // Convert http:// or https:// to ws:// or wss:// respectively
     const wsUrl = apiUrl.replace(/^http/, 'ws').replace(/^https/, 'wss');
     console.log('Attempting WebSocket connection to:', wsUrl);
+    setConnectionStatus('connecting');
 
     try {
       const websocket = new WebSocket(`${wsUrl}/ws/${playerId}`);
@@ -82,6 +85,7 @@ function App() {
       websocket.onopen = () => {
         console.log('WebSocket connection established');
         setWs(websocket);
+        setConnectionStatus('connected');
         setError(''); // Clear any previous connection errors
       };
 
@@ -99,22 +103,22 @@ function App() {
       websocket.onerror = (error) => {
         console.error('WebSocket error:', error);
         setError('Failed to connect to server. Please try refreshing the page.');
+        setConnectionStatus('disconnected');
       };
 
-      websocket.onclose = (event) => {
-        console.log('WebSocket connection closed:', event);
-        if (!event.wasClean) {
-          setError('Connection to server lost. Please try refreshing the page.');
-        }
+      websocket.onclose = () => {
+        console.log('WebSocket connection closed');
+        setConnectionStatus('disconnected');
+        setWs(null);
       };
 
       return () => {
-        console.log('Cleaning up WebSocket connection');
         websocket.close();
       };
     } catch (error) {
-      console.error('Error creating WebSocket connection:', error);
-      setError('Failed to establish connection to server');
+      console.error('Error creating WebSocket:', error);
+      setError('Failed to create WebSocket connection');
+      setConnectionStatus('disconnected');
     }
   }, [playerId, handleServerMessage]);
 
@@ -158,6 +162,23 @@ function App() {
 
   return (
     <div className="App">
+      <div className="connection-status" style={{
+        position: 'fixed',
+        top: '20px',
+        right: '20px',
+        padding: '8px 15px',
+        borderRadius: '8px',
+        backgroundColor: connectionStatus === 'connected' ? '#4CAF50' : 
+                       connectionStatus === 'connecting' ? '#FFA500' : '#f44336',
+        color: 'white',
+        fontSize: '16px',
+        fontWeight: 'bold',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        zIndex: 1000
+      }}>
+        {connectionStatus === 'connected' ? '🟢 Connected' : 
+         connectionStatus === 'connecting' ? '🟡 Connecting...' : '🔴 Disconnected'}
+      </div>
       <header className="App-header">
         <h1>Trick-Taking Card Game</h1>
         {error && <div className="error">{error}</div>}
