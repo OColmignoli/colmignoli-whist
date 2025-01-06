@@ -5,8 +5,7 @@ services:
     env: python
     region: frankfurt
     plan: free
-    runtime: python3
-    buildCommand: pip install -r backend/requirements.txt
+    buildCommand: pip install -r requirements.txt
     startCommand: cd backend/src && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true
@@ -24,19 +23,10 @@ services:
           envVarKey: RENDER_EXTERNAL_URL
     
   # Frontend static site
-  - type: web
+  - type: static
     name: colmignoli-whist-frontend
-    env: static
-    region: frankfurt
-    buildCommand: |
-      cd frontend && 
-      npm install && 
-      REACT_APP_API_URL=$RENDER_EXTERNAL_BACKEND_URL npm run build
-    staticPublishPath: frontend/build
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+    buildCommand: cd frontend && npm install && REACT_APP_API_URL=$RENDER_EXTERNAL_BACKEND_URL npm run build
+    publishPath: frontend/build
     envVars:
       - key: NODE_VERSION
         value: 20.x
