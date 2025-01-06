@@ -16,6 +16,7 @@ services:
     name: colmignoli-whist-frontend
     env: static
     buildCommand: |
+      export NODE_VERSION=20.x &&
       cd frontend && 
       npm install && 
       npm run build
