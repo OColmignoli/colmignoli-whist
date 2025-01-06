@@ -25,6 +25,7 @@ interface GameState {
   cards_per_round: number;
   game_stage: string;
   no_trump_rounds_played: number;
+  max_players: number;
 }
 
 interface GameListing {
@@ -418,38 +419,60 @@ function App() {
             {gameState.phase === 'waiting' && (
               <div className="game-controls" style={{
                 display: 'flex',
-                gap: '10px',
-                justifyContent: 'center',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '20px',
                 margin: '20px 0'
               }}>
-                <button
-                  onClick={addAIPlayer}
-                  style={{
-                    backgroundColor: '#2196F3',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    padding: '10px 20px',
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                  }}
-                >
-                  Add AI Player
-                </button>
-                <button
-                  onClick={startGame}
-                  style={{
-                    backgroundColor: '#4CAF50',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    padding: '10px 20px',
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                  }}
-                >
-                  Start Game (AI will fill empty slots)
-                </button>
+                <div style={{ 
+                  backgroundColor: '#f5f5f5',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  textAlign: 'center'
+                }}>
+                  <p style={{ margin: '0 0 10px 0' }}>
+                    Players ({Object.keys(gameState.players).length}/{gameState.max_players})
+                  </p>
+                  <p style={{ margin: '0', color: '#666' }}>
+                    Need at least 3 players to start
+                  </p>
+                </div>
+                
+                <div style={{
+                  display: 'flex',
+                  gap: '10px',
+                  justifyContent: 'center'
+                }}>
+                  <button
+                    onClick={addAIPlayer}
+                    disabled={Object.keys(gameState.players).length >= gameState.max_players}
+                    style={{
+                      backgroundColor: Object.keys(gameState.players).length >= gameState.max_players ? '#ccc' : '#2196F3',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '10px 20px',
+                      cursor: Object.keys(gameState.players).length >= gameState.max_players ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    Add AI Player
+                  </button>
+                  <button
+                    onClick={startGame}
+                    style={{
+                      backgroundColor: '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '10px 20px',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    Start Game (AI will fill empty slots)
+                  </button>
+                </div>
               </div>
             )}
 

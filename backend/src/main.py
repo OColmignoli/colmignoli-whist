@@ -630,11 +630,14 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                 game_id = data.get("game_id")
                 if game_id in manager.games:
                     game = manager.games[game_id]
-                    # Add AI players to fill empty slots if needed
+                    
+                    # Add AI players to fill up to minimum required players
+                    ai_players_added = 0
                     while len(game.player_order) < game.min_players:
                         ai_id = game.add_ai_player()
                         if not ai_id:
-                            break  # Stop if we can't add more AI players
+                            break
+                        ai_players_added += 1
                         await manager.broadcast_to_game(
                             game_id,
                             {
@@ -644,18 +647,25 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                             }
                         )
                     
-                    if game.start_game():
-                        await manager.broadcast_to_game(
-                            game_id,
-                            {
-                                "action": "game_started",
-                                "game_state": game.get_game_state(player_id)
-                            }
-                        )
+                    # Now try to start the game
+                    if len(game.player_order) >= game.min_players:
+                        if game.start_game():
+                            await manager.broadcast_to_game(
+                                game_id,
+                                {
+                                    "action": "game_started",
+                                    "game_state": game.get_game_state(player_id)
+                                }
+                            )
+                        else:
+                            await websocket.send_json({
+                                "action": "error",
+                                "message": "Failed to start game"
+                            })
                     else:
                         await websocket.send_json({
                             "action": "error",
-                            "message": "Not enough players to start the game"
+                            "message": f"Need at least {game.min_players} players to start. Currently have {len(game.player_order)}"
                         })
                 else:
                     await websocket.send_json({
