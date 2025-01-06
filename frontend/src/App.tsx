@@ -59,24 +59,32 @@ function App() {
   }, [gameState, setGameState, setError, setGameId]);
 
   useEffect(() => {
-    const apiUrl = process.env.REACT_APP_API_URL || 'ws://localhost:8000';
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
     // Convert http:// or https:// to ws:// or wss:// respectively
-    const wsUrl = apiUrl.replace(/^http/, 'ws');
+    const wsUrl = apiUrl.replace(/^http/, 'ws').replace(/^https/, 'wss');
+    console.log('Connecting to WebSocket URL:', wsUrl); // Add logging
     const websocket = new WebSocket(`${wsUrl}/ws/${playerId}`);
     
     websocket.onopen = () => {
       console.log('Connected to server');
       setWs(websocket);
+      setError(''); // Clear any previous connection errors
     };
 
     websocket.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      console.log('Received message:', data); // Add logging
       handleServerMessage(data);
     };
 
     websocket.onerror = (error) => {
       console.error('WebSocket error:', error);
       setError('Failed to connect to server');
+    };
+
+    websocket.onclose = (event) => {
+      console.log('WebSocket closed:', event);
+      setError('Connection to server closed');
     };
 
     return () => {
