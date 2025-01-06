@@ -10,6 +10,11 @@ services:
         value: 3.11.0
       - key: ENVIRONMENT
         value: production
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: colmignoli-whist-frontend
+          envVarKey: RENDER_EXTERNAL_URL
     
   # Frontend static site
   - type: web

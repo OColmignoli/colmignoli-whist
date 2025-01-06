@@ -4,13 +4,17 @@ from typing import Dict, List, Optional, Set
 import json
 import random
 from datetime import datetime
+import os
 
 app = FastAPI()
+
+# Get frontend URL from environment variable or use a default for local development
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -118,7 +122,7 @@ class Game:
         elif self.game_stage == "no_trump":
             if self.no_trump_rounds_played >= len(self.players):
                 self.game_stage = "descending"
-                self.cards_per_round = max_possible_cards - 1
+                self.cards_per_round = max_possible_cards
             else:
                 self.no_trump_rounds_played += 1
         elif self.game_stage == "descending":
