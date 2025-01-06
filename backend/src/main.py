@@ -20,6 +20,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+async def read_root():
+    return {"status": "healthy", "message": "Whist Game Backend API"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
 # Store active connections and games
 class ConnectionManager:
     def __init__(self):
