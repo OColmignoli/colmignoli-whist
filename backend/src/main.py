@@ -78,6 +78,12 @@ class ConnectionManager:
                 if player_id in self.active_connections:
                     await self.active_connections[player_id].send_json(message)
 
+    def get_game_by_player(self, player_id: str) -> Optional['Game']:
+        game_id = self.player_to_game.get(player_id)
+        if game_id:
+            return self.games.get(game_id)
+        return None
+
 class Card:
     def __init__(self, suit: str, value: str):
         self.suit = suit
@@ -554,6 +560,9 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                     game = manager.games[game_id]
                     if game.add_player(player_id):
                         manager.player_to_game[player_id] = game_id
+                        # Set player name if one exists
+                        if player_id in game.player_names:
+                            game.player_names[player_id] = player_name
                         await manager.broadcast_to_game(
                             game_id,
                             {
