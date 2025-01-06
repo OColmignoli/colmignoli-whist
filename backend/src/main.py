@@ -239,7 +239,7 @@ class Game:
         self.player_names: Dict[str, str] = {}  # Map player_id to display_name
         self.created_at = datetime.now()
         self.ai_players: Dict[str, AIPlayer] = {}
-    
+
     def add_player(self, player_id: str) -> bool:
         if len(self.player_order) >= self.max_players or self.started:
             return False
@@ -249,14 +249,17 @@ class Game:
             self.scores[player_id] = 0
             self.tricks_won[player_id] = 0
         return True
-    
-    def add_ai_player(self) -> str:
+
+    def add_ai_player(self) -> Optional[str]:
+        if len(self.player_order) >= self.max_players or self.started:
+            return None
         ai_id = f"ai_player_{len(self.ai_players) + 1}"
         self.ai_players[ai_id] = AIPlayer(ai_id)
-        self.add_player(ai_id)  # Use existing add_player method
-        self.player_names[ai_id] = f"Computer {len(self.ai_players)} 🤖"
-        return ai_id
-    
+        if self.add_player(ai_id):  # Use existing add_player method
+            self.player_names[ai_id] = f"Computer {len(self.ai_players)} 🤖"
+            return ai_id
+        return None
+
     def start_game(self) -> bool:
         if len(self.player_order) < self.min_players or self.started:
             return False
@@ -269,32 +272,7 @@ class Game:
             asyncio.create_task(self.handle_ai_turns())
         
         return True
-    
-    def _start_new_round(self):
-        self.deck.reset()
-        self.current_round = {}
-        self.bids = {}
-        self.tricks_won = {p: 0 for p in self.player_order}
-        self.phase = "bidding"
-        
-        # Deal cards
-        for player_id in self.player_order:
-            self.players[player_id] = []
-            for _ in range(self.cards_per_round):
-                card = self.deck.draw()
-                if card:
-                    self.players[player_id].append(card)
-        
-        # Set trump card if not in no_trump stage
-        if self.game_stage != "no_trump":
-            self.trump_card = self.deck.draw()
-        else:
-            self.trump_card = None
-        
-        # Set first player (after dealer)
-        self.dealer_index = (self.dealer_index + 1) % len(self.player_order)
-        self.current_player = self.player_order[(self.dealer_index + 1) % len(self.player_order)]
-        
+
     def remove_player(self, player_id: str):
         if player_id in self.player_order:
             self.player_order.remove(player_id)
@@ -475,6 +453,31 @@ class Game:
                     )
                     self.play_card(self.current_player, card_index)
 
+    def _start_new_round(self):
+        self.deck.reset()
+        self.current_round = {}
+        self.bids = {}
+        self.tricks_won = {p: 0 for p in self.player_order}
+        self.phase = "bidding"
+        
+        # Deal cards
+        for player_id in self.player_order:
+            self.players[player_id] = []
+            for _ in range(self.cards_per_round):
+                card = self.deck.draw()
+                if card:
+                    self.players[player_id].append(card)
+        
+        # Set trump card if not in no_trump stage
+        if self.game_stage != "no_trump":
+            self.trump_card = self.deck.draw()
+        else:
+            self.trump_card = None
+        
+        # Set first player (after dealer)
+        self.dealer_index = (self.dealer_index + 1) % len(self.player_order)
+        self.current_player = self.player_order[(self.dealer_index + 1) % len(self.player_order)]
+
 def generate_game_id() -> str:
     adjectives = [
         "Happy", "Lucky", "Wild", "Brave", "Clever", "Mighty", "Swift", "Jolly",
@@ -601,8 +604,8 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                 game_id = data.get("game_id")
                 if game_id in manager.games:
                     game = manager.games[game_id]
-                    if len(game.player_order) < game.max_players and not game.started:
-                        ai_id = game.add_ai_player()
+                    ai_id = game.add_ai_player()
+                    if ai_id:
                         await manager.broadcast_to_game(
                             game_id,
                             {
@@ -627,9 +630,11 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                 game_id = data.get("game_id")
                 if game_id in manager.games:
                     game = manager.games[game_id]
-                    # Add AI players to fill empty slots
+                    # Add AI players to fill empty slots if needed
                     while len(game.player_order) < game.min_players:
                         ai_id = game.add_ai_player()
+                        if not ai_id:
+                            break  # Stop if we can't add more AI players
                         await manager.broadcast_to_game(
                             game_id,
                             {
