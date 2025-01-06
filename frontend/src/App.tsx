@@ -232,7 +232,7 @@ function App() {
          connectionStatus === 'connecting' ? '🟡 Connecting...' : '🔴 Disconnected'}
       </div>
       <header className="App-header">
-        <h1>Trick-Taking Card Game</h1>
+        <h1>Whist Alla Colmignoli</h1>
         {error && <div className="error">{error}</div>}
       </header>
       
