@@ -26,7 +26,7 @@ async def read_root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 @app.get("/debug")
 async def debug_info():

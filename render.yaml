@@ -10,19 +10,18 @@ services:
     envVars:
       - key: ENVIRONMENT
         value: production
-      - key: PORT
-        value: "10000"
       - key: FRONTEND_URL
         fromService:
-          type: web
+          type: static
           name: colmignoli-whist-frontend
           envVarKey: RENDER_EXTERNAL_URL
     
   # Frontend static site
   - type: static
     name: colmignoli-whist-frontend
-    buildCommand: cd frontend && npm install && REACT_APP_API_URL=$RENDER_EXTERNAL_BACKEND_URL npm run build
-    publishPath: frontend/build
+    rootDir: frontend
+    buildCommand: npm install && REACT_APP_API_URL=$RENDER_EXTERNAL_BACKEND_URL npm run build
+    publishPath: build
     envVars:
       - key: NODE_VERSION
         value: 20.x
