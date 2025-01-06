@@ -149,9 +149,13 @@ function App() {
 
   const joinGame = useCallback((gameIdToJoin: string) => {
     if (ws) {
-      ws.send(JSON.stringify({ action: 'join_game', game_id: gameIdToJoin }));
+      ws.send(JSON.stringify({ 
+        action: 'join_game', 
+        game_id: gameIdToJoin,
+        name: playerName 
+      }));
     }
-  }, [ws]);
+  }, [ws, playerName]);
 
   const startGame = useCallback(() => {
     if (ws) {
@@ -304,9 +308,9 @@ function App() {
                 </React.Fragment>
               ))}</p>
               <p>Current Player: {
-                gameState.current_player.startsWith('ai_player') ? 
+                gameState.current_player && gameState.current_player.startsWith('ai_player') ? 
                 `${gameState.player_names[gameState.current_player]} 🤖 (thinking...)` :
-                gameState.player_names[gameState.current_player] || gameState.current_player
+                gameState.player_names[gameState.current_player] || gameState.current_player || 'Waiting...'
               }</p>
               <p>Phase: {gameState.phase}</p>
               <p>

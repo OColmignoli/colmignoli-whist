@@ -561,8 +561,8 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                     if game.add_player(player_id):
                         manager.player_to_game[player_id] = game_id
                         # Set player name if one exists
-                        if player_id in game.player_names:
-                            game.player_names[player_id] = player_name
+                        if "name" in data:
+                            game.player_names[player_id] = data["name"]
                         await manager.broadcast_to_game(
                             game_id,
                             {
