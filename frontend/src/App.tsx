@@ -59,37 +59,63 @@ function App() {
   }, [gameState, setGameState, setError, setGameId]);
 
   useEffect(() => {
-    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    let apiUrl = process.env.REACT_APP_API_URL;
+    if (!apiUrl) {
+      console.error('REACT_APP_API_URL is not set');
+      setError('API URL not configured');
+      return;
+    }
+    console.log('API URL:', apiUrl);
+
+    // Ensure the URL uses HTTPS in production
+    if (process.env.NODE_ENV === 'production' && apiUrl.startsWith('http://')) {
+      apiUrl = apiUrl.replace('http://', 'https://');
+    }
+
     // Convert http:// or https:// to ws:// or wss:// respectively
     const wsUrl = apiUrl.replace(/^http/, 'ws').replace(/^https/, 'wss');
-    console.log('Connecting to WebSocket URL:', wsUrl); // Add logging
-    const websocket = new WebSocket(`${wsUrl}/ws/${playerId}`);
-    
-    websocket.onopen = () => {
-      console.log('Connected to server');
-      setWs(websocket);
-      setError(''); // Clear any previous connection errors
-    };
+    console.log('Attempting WebSocket connection to:', wsUrl);
 
-    websocket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log('Received message:', data); // Add logging
-      handleServerMessage(data);
-    };
+    try {
+      const websocket = new WebSocket(`${wsUrl}/ws/${playerId}`);
+      
+      websocket.onopen = () => {
+        console.log('WebSocket connection established');
+        setWs(websocket);
+        setError(''); // Clear any previous connection errors
+      };
 
-    websocket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setError('Failed to connect to server');
-    };
+      websocket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('Received message:', data);
+          handleServerMessage(data);
+        } catch (e) {
+          console.error('Error parsing WebSocket message:', e);
+          setError('Error processing server message');
+        }
+      };
 
-    websocket.onclose = (event) => {
-      console.log('WebSocket closed:', event);
-      setError('Connection to server closed');
-    };
+      websocket.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setError('Failed to connect to server. Please try refreshing the page.');
+      };
 
-    return () => {
-      websocket.close();
-    };
+      websocket.onclose = (event) => {
+        console.log('WebSocket connection closed:', event);
+        if (!event.wasClean) {
+          setError('Connection to server lost. Please try refreshing the page.');
+        }
+      };
+
+      return () => {
+        console.log('Cleaning up WebSocket connection');
+        websocket.close();
+      };
+    } catch (error) {
+      console.error('Error creating WebSocket connection:', error);
+      setError('Failed to establish connection to server');
+    }
   }, [playerId, handleServerMessage]);
 
   const createGame = useCallback(() => {

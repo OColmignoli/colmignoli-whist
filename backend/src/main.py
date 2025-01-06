@@ -28,6 +28,16 @@ async def read_root():
 async def health_check():
     return {"status": "healthy"}
 
+@app.get("/debug")
+async def debug_info():
+    return {
+        "frontend_url": FRONTEND_URL,
+        "environment": os.environ.get("ENVIRONMENT"),
+        "allowed_origins": [FRONTEND_URL],
+        "python_version": os.environ.get("PYTHON_VERSION"),
+        "server_time": datetime.now().isoformat()
+    }
+
 # Store active connections and games
 class ConnectionManager:
     def __init__(self):
